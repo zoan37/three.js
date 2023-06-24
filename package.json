@@ -118,5 +118,8 @@
       "build/three.module.js"
     ],
     "directories": {}
+  },
+  "dependencies": {
+    "window.ai": "^0.2.2"
   }
 }

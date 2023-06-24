@@ -40,11 +40,13 @@
 		import {Octree} from 'three/addons/math/Octree.js';
 		import {OctreeHelper} from 'three/addons/helpers/OctreeHelper.js';
 
-		import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+		import {PLYLoader} from 'three/addons/loaders/PLYLoader.js';
 
 		import {Capsule} from 'three/addons/math/Capsule.js';
 
 		import {GUI} from 'three/addons/libs/lil-gui.module.min.js';
+
+		// import { getWindowAI } from 'window.ai';
 
 		const clock = new THREE.Clock();
 
@@ -415,66 +417,138 @@
 
 		}
 
-		const plyLoader = new PLYLoader();
-		plyLoader.load('./models/ply/an underwater temple.ply', function (geometry) {
+		// TODO: handle case of user spamming generate calls, should wait some time for generate to finish
+		const generate3DObject = async () => {
+			try {
+				if (!window.ai) {
+					alert('window.ai not found');
+					throw new Error('window.ai not found');
+				}
+			} catch (error) {
+				console.error(error);
+			}
 
-			console.log('ply loaded', geometry);
+			console.log('generating...')
 
-			geometry.computeVertexNormals();
+			// Code for streaming a response
+			// from a user's Window AI model
+			const generateResponse = await window.ai.generateText(
+				{
+					prompt: "Hello world!"
+				},
+				{
+					onStreamResult: (res) =>
+						console.log(result.text)
+				}
+			)
 
-			const material = new THREE.MeshStandardMaterial({color: 0x009cff, flatShading: true});
-			const mesh = new THREE.Mesh(geometry, material);
+			console.log('generateResponse', generateResponse);
 
-			// mesh.position.y = - 0.2;
-			// mesh.position.z = 0.3;
-			mesh.rotation.x = - Math.PI / 2;
-			mesh.scale.multiplyScalar(100);
+			const inputText = 'a floating island';
+			const promptObject = {prompt: inputText};
 
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
+			console.log('promptObject', promptObject);
 
-			const meshScene = new THREE.Scene();
-			meshScene.add(mesh);
+			const output = await window.ai.BETA_generate3DObject(promptObject, {
+				extension: "application/x-ply",
+				numInferenceSteps: 16,
+			});
 
-			scene.add(meshScene);
+			console.log('generate3DObject', output);
 
-			// scene.add(mesh);
+			console.log('output[0].uri', output[0].uri)
 
-			console.log('mesh from ply', mesh);
+			const filename = `${inputText}.ply`;
 
-			worldOctree.fromGraphNode(meshScene);
+			const data_uri = output[0].uri;
 
-			meshScene.traverse(child => {
+			// save to file
+			/*
+			const link = document.createElement('a');
+			link.download = filename;
+			link.href = data_uri;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			*/
 
-				if (child.isMesh) {
+			return output[0].uri;
+		};
 
-					child.castShadow = true;
-					child.receiveShadow = true;
+		async function loadScene() {
+			console.log('loading scene');
 
-					if (child.material.map) {
+			const plyURI = await generate3DObject();
 
-						child.material.map.anisotropy = 4;
+			// './models/ply/an underwater temple.ply'
+
+			const plyLoader = new PLYLoader();
+			plyLoader.load(plyURI, function (geometry) {
+
+				console.log('ply loaded', geometry);
+
+				geometry.computeVertexNormals();
+
+				const material = new THREE.MeshStandardMaterial({color: 0x009cff, flatShading: true});
+				const mesh = new THREE.Mesh(geometry, material);
+
+				// mesh.position.y = - 0.2;
+				// mesh.position.z = 0.3;
+				mesh.rotation.x = - Math.PI / 2;
+				mesh.scale.multiplyScalar(100);
+
+				mesh.castShadow = true;
+				mesh.receiveShadow = true;
+
+				const meshScene = new THREE.Scene();
+				meshScene.add(mesh);
+
+				scene.add(meshScene);
+
+				// scene.add(mesh);
+
+				console.log('mesh from ply', mesh);
+
+				worldOctree.fromGraphNode(meshScene);
+
+				meshScene.traverse(child => {
+
+					if (child.isMesh) {
+
+						child.castShadow = true;
+						child.receiveShadow = true;
+
+						if (child.material.map) {
+
+							child.material.map.anisotropy = 4;
+
+						}
 
 					}
 
-				}
-
-			});
-
-			const helper = new OctreeHelper(worldOctree);
-			helper.visible = false;
-			scene.add(helper);
-
-			const gui = new GUI({width: 200});
-			gui.add({debug: false}, 'debug')
-				.onChange(function (value) {
-
-					helper.visible = value;
-
 				});
 
-			animate();
-		});
+				const helper = new OctreeHelper(worldOctree);
+				helper.visible = false;
+				scene.add(helper);
+
+				const gui = new GUI({width: 200});
+				gui.add({debug: false}, 'debug')
+					.onChange(function (value) {
+
+						helper.visible = value;
+
+					});
+
+				animate();
+			});
+
+
+		}
+
+		setTimeout(async () => {
+			await loadScene();
+		}, 1000); // time for window.ai to load
 
 		const loader = new GLTFLoader().setPath('./models/gltf/');
 
@@ -523,7 +597,7 @@
 
 		function teleportPlayerIfOob() {
 
-			const LEVEL = -1000;
+			const LEVEL = -250;
 			if (camera.position.y <= LEVEL) {
 
 				playerCollider.start.set(0, 0.35, 0);
